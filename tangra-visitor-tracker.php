@@ -388,8 +388,11 @@ class Tangra_Visitor_Tracker {
           </style>
         </div>
         <?php
-        wp_enqueue_script('chartjs','https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',[], '4.4.1', true);
+        // Load Chart.js from local copy for better reliability
+        wp_enqueue_script('chartjs', plugins_url('node_modules/chart.js/dist/chart.umd.min.js', __FILE__), [], '4.4.1', true);
         wp_enqueue_script('tvt-analytics', plugins_url('tvt-analytics.js', __FILE__), ['chartjs','jquery'], '1.1.2', true);
+        // Ensure Chart.js loads first
+        wp_script_add_data('chartjs', 'strategy', 'defer');
         wp_localize_script('tvt-analytics', 'TVT_ANALYTICS', [
             'ajax'   => admin_url('admin-ajax.php'),
             'nonce'  => wp_create_nonce('tvt_stats'),

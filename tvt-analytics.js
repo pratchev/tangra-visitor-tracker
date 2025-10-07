@@ -114,17 +114,46 @@
         canvas.className = 'tvt-canvas skip-lazy no-lazyload';
         canvas.setAttribute('data-no-lazy','1');
         canvas.setAttribute('data-nitro-lazy','off');
+        canvas.setAttribute('data-lazy','false');
         canvas.style.minHeight = '160px';
         holder.innerHTML = '';
         holder.appendChild(canvas);
-        rerender();
+        // Add a small delay to ensure Chart.js is ready
+        setTimeout(() => {
+          if (typeof Chart !== 'undefined') {
+            rerender();
+          } else {
+            showNoData(id, 'Chart.js is still loading...');
+          }
+        }, 100);
       }
     };
 
-    const mo = new MutationObserver(rebuild);
+    // Initial build with retry mechanism
+    let retries = 0;
+    const initialBuild = () => {
+      if (typeof Chart === 'undefined' && retries < 5) {
+        retries++;
+        setTimeout(initialBuild, 500);
+        return;
+      }
+      rebuild();
+    };
+    initialBuild();
+
+    const mo = new MutationObserver((mutations) => {
+      // Only rebuild if the canvas was actually removed or replaced
+      if (mutations.some(m => Array.from(m.removedNodes).some(n => n.id === id))) {
+        rebuild();
+      }
+    });
     mo.observe(holder, { childList: true });
 
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) rebuild(); });
+    document.addEventListener('visibilitychange', () => { 
+      if (!document.hidden) {
+        setTimeout(rebuild, 100);
+      }
+    });
   }
 
   $('#tvt-analytics-form').on('submit', function(e){
