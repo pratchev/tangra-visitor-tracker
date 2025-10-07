@@ -422,12 +422,17 @@ class Tangra_Visitor_Tracker {
 
     public function ajax_fetch_stats(){
         if(!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'] ?? '', 'tvt_stats')){
-            wp_send_json_error(['msg'=>'Unauthorized'], 403);
+            wp_send_json_error(['message'=>'Unauthorized access'], 403);
         }
+
+        // Debug information
+        error_log('TVT Stats Request: ' . json_encode($_POST));
+
         // Ensure analytics JSON is not cached
         nocache_headers();
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Pragma: no-cache');
+        header('Content-Type: application/json');
 
         global $wpdb; $table = $wpdb->base_prefix . self::TABLE;
 
@@ -435,6 +440,19 @@ class Tangra_Visitor_Tracker {
         $to    = sanitize_text_field($_POST['to'] ?? '');
         $event = sanitize_text_field($_POST['event'] ?? '');
         $guests= !empty($_POST['guests']);
+
+        // Validate inputs
+        if(empty($from) || empty($to)) {
+            wp_send_json_error(['message' => 'Invalid date range'], 400);
+        }
+
+        // Log the query parameters
+        error_log('TVT Query Parameters: ' . json_encode([
+            'from' => $from,
+            'to' => $to,
+            'event' => $event,
+            'guests' => $guests
+        ]));
 
         $where = ' WHERE 1=1 ';
         $params = [];

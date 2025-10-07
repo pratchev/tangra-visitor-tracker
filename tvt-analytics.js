@@ -147,53 +147,64 @@
     const event= $('#tvt_event').val();
     const guests = $('#tvt_guests').is(':checked') ? 1 : 0;
 
+    console.log('Fetching stats with params:', { from, to, event, guests });
+    console.log('Ajax URL:', TVT_ANALYTICS.ajax);
+    console.log('Nonce:', TVT_ANALYTICS.nonce);
+
     // Show loading state
     ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
       showNoData(id, 'Loading data...');
     });
 
-    $.post(TVT_ANALYTICS.ajax, {
-      action: 'tvt_fetch_stats',
-      nonce: TVT_ANALYTICS.nonce,
-      from, to, event, guests
-    }, function(res){
-      if(!res || !res.success) {
-        console.error('Failed to fetch stats:', res);
-        ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
-          showNoData(id, 'Failed to load data');
+    $.ajax({
+      url: TVT_ANALYTICS.ajax,
+      method: 'POST',
+      data: {
+        action: 'tvt_fetch_stats',
+        nonce: TVT_ANALYTICS.nonce,
+        from, to, event, guests
+      },
+      dataType: 'json',
+      success: function(res) {
+        console.log('Raw AJAX response:', res);
+
+        if(!res || !res.success) {
+          console.error('Failed to fetch stats:', res);
+          ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+            showNoData(id, res?.data?.message || 'Failed to load data');
+          });
+          return;
+        }
+
+        if(!res.data || typeof res.data !== 'object') {
+          console.error('Invalid data format received');
+          return;
+        }
+
+        console.log('Processing data:', {
+          daily: res.data.daily,
+          top_pages: res.data.top_pages,
+          kpis: res.data.kpis
         });
-        return;
-      }
 
-      console.log('Received stats data:', res.data); // Debug log
+        // store last data for re-render
+        window.__tvt_last_daily = Array.isArray(res.data.daily) ? res.data.daily : [];
+        window.__tvt_last_pages = Array.isArray(res.data.top_pages) ? res.data.top_pages : [];
 
-      // Validate received data
-      if(!res.data || typeof res.data !== 'object') {
-        console.error('Invalid data format received');
-        return;
-      }
-
-      // store last data for re-render
-      window.__tvt_last_daily = Array.isArray(res.data.daily) ? res.data.daily : [];
-      window.__tvt_last_pages = Array.isArray(res.data.top_pages) ? res.data.top_pages : [];
-
-      renderKPIs(res.data.kpis || {});
-      
-      // Ensure Chart.js is loaded before rendering
-      if(typeof Chart !== 'undefined') {
+        renderKPIs(res.data.kpis || {});
         renderDaily(window.__tvt_last_daily);
         renderPages(window.__tvt_last_pages);
-      } else {
-        console.error('Chart.js not loaded when attempting to render');
+      },
+      error: function(xhr, status, error) {
+        console.error('Ajax request failed:', {
+          status: status,
+          error: error,
+          response: xhr.responseText
+        });
         ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
-          showNoData(id, 'Chart.js failed to load');
+          showNoData(id, 'Server error: ' + error);
         });
       }
-    }).fail(function(xhr, status, error) {
-      console.error('Ajax request failed:', status, error);
-      ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
-        showNoData(id, 'Failed to fetch data from server');
-      });
     });
   }
 
