@@ -1,4 +1,12 @@
-(function($){
+(fu  function showNoData(canvasId, msg){
+    const container = document.getElementById(canvasId + '_container');
+    if(!container) {
+      console.error(`Container ${canvasId}_container not found`);
+      return;
+    }
+    container.innerHTML = '<div style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#6b7280;border:1px dashed #e5e7eb;border-radius:8px;background-color:#fff;">' 
+      + (msg || 'No data for the selected filters') + '</div>';
+    console.log(`Showing no data message for ${canvasId}: ${msg}`);$){
   let chartDaily, chartPages;
 
   function showNoData(canvasId, msg){
@@ -278,8 +286,41 @@
   $('#tvt_to').val(to);
   $('#tvt_from').val(fmt(fromDate));
 
-  // Init
-  fetchStats();
-  protectCanvas('tvt_chart_daily', () => renderDaily(window.__tvt_last_daily || []));
-  protectCanvas('tvt_chart_pages', () => renderPages(window.__tvt_last_pages || []));
+  // Wait for document ready to ensure elements exist
+  $(document).ready(function() {
+    // Ensure canvas elements exist
+    const createCanvas = (id) => {
+      const container = $(`#${id}_container`);
+      if (container.length) {
+        container.empty().append(
+          $('<canvas>', {
+            id: id,
+            class: 'tvt-canvas skip-lazy no-lazyload',
+            'data-no-lazy': '1',
+            'data-nitro-lazy': 'off',
+            css: { minHeight: '160px', width: '100%' }
+          })
+        );
+        console.log(`Canvas ${id} initialized`);
+        return true;
+      }
+      console.error(`Container #${id}_container not found`);
+      return false;
+    };
+
+    // Initialize canvases
+    const canvasesReady = ['tvt_chart_daily', 'tvt_chart_pages'].every(createCanvas);
+    
+    if (canvasesReady) {
+      console.log('Canvases initialized, setting up protection');
+      protectCanvas('tvt_chart_daily', () => renderDaily(window.__tvt_last_daily || []));
+      protectCanvas('tvt_chart_pages', () => renderPages(window.__tvt_last_pages || []));
+      
+      // Fetch stats after canvas initialization
+      console.log('Fetching initial stats');
+      fetchStats();
+    } else {
+      console.error('Failed to initialize canvas elements');
+    }
+  });
 })(jQuery);

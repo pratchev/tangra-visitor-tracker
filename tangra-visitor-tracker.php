@@ -369,17 +369,12 @@ class Tangra_Visitor_Tracker {
             <div class="card"><strong id="kpi_logins">0</strong><div>Logins</div></div>
           </div>
 
-          <div style="max-width:1100px;">
+                    <div style="max-width:1100px;">
             <h2>Daily Events</h2>
-            <canvas id="tvt_chart_daily"
-                    class="tvt-canvas skip-lazy no-lazyload"
-                    data-no-lazy="1" data-nitro-lazy="off"
-                    height="130" style="min-height:160px;"></canvas>
+            <div id="tvt_chart_daily_container" class="chart-container" style="position:relative;min-height:160px;margin-bottom:24px;background:#fff;border-radius:8px;padding:16px;"></div>
+            
             <h2 style="margin-top:24px;">Top Pages</h2>
-            <canvas id="tvt_chart_pages"
-                    class="tvt-canvas skip-lazy no-lazyload"
-                    data-no-lazy="1" data-nitro-lazy="off"
-                    height="130" style="min-height:160px;"></canvas>
+            <div id="tvt_chart_pages_container" class="chart-container" style="position:relative;min-height:160px;margin-bottom:24px;background:#fff;border-radius:8px;padding:16px;"></div>
           </div>
 
           <style>
