@@ -388,11 +388,31 @@ class Tangra_Visitor_Tracker {
           </style>
         </div>
         <?php
-        // Load Chart.js from local copy for better reliability
-        wp_enqueue_script('chartjs', plugins_url('node_modules/chart.js/dist/chart.umd.min.js', __FILE__), [], '4.4.1', true);
-        wp_enqueue_script('tvt-analytics', plugins_url('tvt-analytics.js', __FILE__), ['chartjs','jquery'], '1.1.2', true);
-        // Ensure Chart.js loads first
-        wp_script_add_data('chartjs', 'strategy', 'defer');
+        // Load Chart.js with proper path and dependencies
+        wp_enqueue_script(
+            'chartjs', 
+            plugins_url('node_modules/chart.js/dist/chart.umd.js', __FILE__),
+            ['jquery'],
+            '4.4.1',
+            false  // Load in header to ensure it's available
+        );
+        
+        // Load analytics script after Chart.js
+        wp_enqueue_script(
+            'tvt-analytics',
+            plugins_url('tvt-analytics.js', __FILE__),
+            ['chartjs', 'jquery'],
+            '1.1.2',
+            true
+        );
+        
+        // Add inline script to verify Chart.js loading
+        wp_add_inline_script('chartjs', '
+            console.log("Chart.js loading status:", typeof Chart !== "undefined");
+            if (typeof Chart === "undefined") {
+                console.error("Chart.js failed to load properly");
+            }
+        ');
         wp_localize_script('tvt-analytics', 'TVT_ANALYTICS', [
             'ajax'   => admin_url('admin-ajax.php'),
             'nonce'  => wp_create_nonce('tvt_stats'),

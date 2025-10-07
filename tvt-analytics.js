@@ -13,14 +13,32 @@
   function chartSafe(cb, fallbackId){
     try{
       if (typeof Chart === 'undefined'){
-        showNoData(fallbackId, 'Charts unavailable (Chart.js blocked).');
+        console.error('Chart.js not loaded');
+        showNoData(fallbackId, 'Charts unavailable (Chart.js not loaded).');
         return false;
       }
-      cb();
+
+      // Check if canvas exists and is ready
+      const canvas = document.getElementById(fallbackId);
+      if(!canvas) {
+        console.error('Canvas element not found:', fallbackId);
+        return false;
+      }
+
+      // Ensure canvas is properly sized
+      const parent = canvas.parentElement;
+      if(parent) {
+        canvas.style.width = '100%';
+        canvas.style.height = parent.clientHeight + 'px';
+      }
+
+      // Execute callback with error boundary
+      const result = cb();
+      console.log('Chart rendered successfully for:', fallbackId);
       return true;
     }catch(e){
-      console.error(e);
-      showNoData(fallbackId, 'Unable to render chart.');
+      console.error('Chart rendering failed:', e);
+      showNoData(fallbackId, 'Unable to render chart: ' + e.message);
       return false;
     }
   }
@@ -33,8 +51,16 @@
   }
 
   function renderDaily(d){
-    const labels = (d||[]).map(x=>x.day);
-    const data   = (d||[]).map(x=>x.count);
+    console.log('Rendering daily chart with data:', d); // Debug log
+    
+    if(!Array.isArray(d)) {
+      console.error('Daily data is not an array:', d);
+      showNoData('tvt_chart_daily', 'Invalid data received');
+      return;
+    }
+
+    const labels = d.map(x => x.day);
+    const data = d.map(x => x.count);
 
     if(!labels.length){
       showNoData('tvt_chart_daily', 'No events in this date range');
@@ -43,12 +69,50 @@
 
     chartSafe(()=>{
       const ctx = document.getElementById('tvt_chart_daily');
-      if(chartDaily) chartDaily.destroy();
+      if(!ctx) {
+        console.error('Canvas context not found for daily chart');
+        return;
+      }
+
+      if(chartDaily) {
+        console.log('Destroying existing daily chart'); // Debug log
+        chartDaily.destroy();
+      }
+
       chartDaily = new Chart(ctx, {
         type: 'line',
-        data: { labels, datasets: [{ label: 'Events', data }] },
-        options: { responsive: true, maintainAspectRatio: false }
+        data: { 
+          labels, 
+          datasets: [{ 
+            label: 'Events',
+            data,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
       });
+      console.log('Daily chart created successfully'); // Debug log
     }, 'tvt_chart_daily');
   }
 
@@ -83,20 +147,53 @@
     const event= $('#tvt_event').val();
     const guests = $('#tvt_guests').is(':checked') ? 1 : 0;
 
+    // Show loading state
+    ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+      showNoData(id, 'Loading data...');
+    });
+
     $.post(TVT_ANALYTICS.ajax, {
       action: 'tvt_fetch_stats',
       nonce: TVT_ANALYTICS.nonce,
       from, to, event, guests
     }, function(res){
-      if(!res || !res.success) return;
+      if(!res || !res.success) {
+        console.error('Failed to fetch stats:', res);
+        ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+          showNoData(id, 'Failed to load data');
+        });
+        return;
+      }
+
+      console.log('Received stats data:', res.data); // Debug log
+
+      // Validate received data
+      if(!res.data || typeof res.data !== 'object') {
+        console.error('Invalid data format received');
+        return;
+      }
 
       // store last data for re-render
-      window.__tvt_last_daily = res.data.daily || [];
-      window.__tvt_last_pages = res.data.top_pages || [];
+      window.__tvt_last_daily = Array.isArray(res.data.daily) ? res.data.daily : [];
+      window.__tvt_last_pages = Array.isArray(res.data.top_pages) ? res.data.top_pages : [];
 
       renderKPIs(res.data.kpis || {});
-      renderDaily(window.__tvt_last_daily);
-      renderPages(window.__tvt_last_pages);
+      
+      // Ensure Chart.js is loaded before rendering
+      if(typeof Chart !== 'undefined') {
+        renderDaily(window.__tvt_last_daily);
+        renderPages(window.__tvt_last_pages);
+      } else {
+        console.error('Chart.js not loaded when attempting to render');
+        ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+          showNoData(id, 'Chart.js failed to load');
+        });
+      }
+    }).fail(function(xhr, status, error) {
+      console.error('Ajax request failed:', status, error);
+      ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+        showNoData(id, 'Failed to fetch data from server');
+      });
     });
   }
 
