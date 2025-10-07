@@ -1,0 +1,326 @@
+(fu  function showNoData(canvasId, msg){
+    const container = document.getElementById(canvasId + '_container');
+    if(!container) {
+      console.error(`Container ${canvasId}_container not found`);
+      return;
+    }
+    container.innerHTML = '<div style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#6b7280;border:1px dashed #e5e7eb;border-radius:8px;background-color:#fff;">' 
+      + (msg || 'No data for the selected filters') + '</div>';
+    console.log(`Showing no data message for ${canvasId}: ${msg}`);$){
+  let chartDaily, chartPages;
+
+  function showNoData(canvasId, msg){
+    const el = document.getElementById(canvasId);
+    if(!el) return;
+    const parent = el.parentElement;
+    parent.style.position = 'relative';
+    parent.innerHTML = '<div style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#6b7280;border:1px dashed #e5e7eb;border-radius:8px;">'
+      + (msg || 'No data for the selected filters') + '</div>';
+  }
+
+  function chartSafe(cb, fallbackId){
+    try{
+      if (typeof Chart === 'undefined'){
+        console.error('Chart.js not loaded');
+        showNoData(fallbackId, 'Charts unavailable (Chart.js not loaded).');
+        return false;
+      }
+
+      // Check if canvas exists and is ready
+      const canvas = document.getElementById(fallbackId);
+      if(!canvas) {
+        console.error('Canvas element not found:', fallbackId);
+        return false;
+      }
+
+      // Ensure canvas is properly sized
+      const parent = canvas.parentElement;
+      if(parent) {
+        canvas.style.width = '100%';
+        canvas.style.height = parent.clientHeight + 'px';
+      }
+
+      // Execute callback with error boundary
+      const result = cb();
+      console.log('Chart rendered successfully for:', fallbackId);
+      return true;
+    }catch(e){
+      console.error('Chart rendering failed:', e);
+      showNoData(fallbackId, 'Unable to render chart: ' + e.message);
+      return false;
+    }
+  }
+
+  function renderKPIs(k){
+    $('#kpi_total').text(k.total||0);
+    $('#kpi_unique').text(k.unique||0);
+    $('#kpi_views').text(k.views||0);
+    $('#kpi_logins').text(k.logins||0);
+  }
+
+  function renderDaily(d){
+    console.log('Rendering daily chart with data:', d); // Debug log
+    
+    if(!Array.isArray(d)) {
+      console.error('Daily data is not an array:', d);
+      showNoData('tvt_chart_daily', 'Invalid data received');
+      return;
+    }
+
+    const labels = d.map(x => x.day);
+    const data = d.map(x => x.count);
+
+    if(!labels.length){
+      showNoData('tvt_chart_daily', 'No events in this date range');
+      return;
+    }
+
+    chartSafe(()=>{
+      const ctx = document.getElementById('tvt_chart_daily');
+      if(!ctx) {
+        console.error('Canvas context not found for daily chart');
+        return;
+      }
+
+      if(chartDaily) {
+        console.log('Destroying existing daily chart'); // Debug log
+        chartDaily.destroy();
+      }
+
+      chartDaily = new Chart(ctx, {
+        type: 'line',
+        data: { 
+          labels, 
+          datasets: [{ 
+            label: 'Events',
+            data,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      });
+      console.log('Daily chart created successfully'); // Debug log
+    }, 'tvt_chart_daily');
+  }
+
+  function renderPages(d){
+    const rows = d||[];
+    const labels = rows.map(x=>x.url);
+    const data   = rows.map(x=>x.count);
+
+    if(!labels.length){
+      showNoData('tvt_chart_pages', 'No page hits in this date range');
+      return;
+    }
+
+    chartSafe(()=>{
+      const ctx = document.getElementById('tvt_chart_pages');
+      if(chartPages) chartPages.destroy();
+      chartPages = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Hits', data }] },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          scales: { y: { ticks: { callback: v => (labels[v]||'').slice(0,60) } } }
+        }
+      });
+    }, 'tvt_chart_pages');
+  }
+
+  function fetchStats(){
+    const from = $('#tvt_from').val();
+    const to   = $('#tvt_to').val();
+    const event= $('#tvt_event').val();
+    const guests = $('#tvt_guests').is(':checked') ? 1 : 0;
+
+    console.log('Fetching stats with params:', { from, to, event, guests });
+    console.log('Ajax URL:', TVT_ANALYTICS.ajax);
+    console.log('Nonce:', TVT_ANALYTICS.nonce);
+
+    // Show loading state
+    ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+      showNoData(id, 'Loading data...');
+    });
+
+    $.ajax({
+      url: TVT_ANALYTICS.ajax,
+      method: 'POST',
+      data: {
+        action: 'tvt_fetch_stats',
+        nonce: TVT_ANALYTICS.nonce,
+        from, to, event, guests
+      },
+      dataType: 'json',
+      success: function(res) {
+        console.log('Raw AJAX response:', res);
+
+        if(!res || !res.success) {
+          console.error('Failed to fetch stats:', res);
+          ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+            showNoData(id, res?.data?.message || 'Failed to load data');
+          });
+          return;
+        }
+
+        if(!res.data || typeof res.data !== 'object') {
+          console.error('Invalid data format received');
+          return;
+        }
+
+        console.log('Processing data:', {
+          daily: res.data.daily,
+          top_pages: res.data.top_pages,
+          kpis: res.data.kpis
+        });
+
+        // store last data for re-render
+        window.__tvt_last_daily = Array.isArray(res.data.daily) ? res.data.daily : [];
+        window.__tvt_last_pages = Array.isArray(res.data.top_pages) ? res.data.top_pages : [];
+
+        renderKPIs(res.data.kpis || {});
+        renderDaily(window.__tvt_last_daily);
+        renderPages(window.__tvt_last_pages);
+      },
+      error: function(xhr, status, error) {
+        console.error('Ajax request failed:', {
+          status: status,
+          error: error,
+          response: xhr.responseText
+        });
+        ['tvt_chart_daily', 'tvt_chart_pages'].forEach(id => {
+          showNoData(id, 'Server error: ' + error);
+        });
+      }
+    });
+  }
+
+  // Protect canvases from lazyload/DOM swaps
+  function protectCanvas(id, rerender){
+    const el = document.getElementById(id);
+    if(!el) return;
+    const holder = el.parentElement;
+
+    const rebuild = () => {
+      const current = document.getElementById(id);
+      if (!current || current.nodeName !== 'CANVAS') {
+        const canvas = document.createElement('canvas');
+        canvas.id = id;
+        canvas.className = 'tvt-canvas skip-lazy no-lazyload';
+        canvas.setAttribute('data-no-lazy','1');
+        canvas.setAttribute('data-nitro-lazy','off');
+        canvas.setAttribute('data-lazy','false');
+        canvas.style.minHeight = '160px';
+        holder.innerHTML = '';
+        holder.appendChild(canvas);
+        // Add a small delay to ensure Chart.js is ready
+        setTimeout(() => {
+          if (typeof Chart !== 'undefined') {
+            rerender();
+          } else {
+            showNoData(id, 'Chart.js is still loading...');
+          }
+        }, 100);
+      }
+    };
+
+    // Initial build with retry mechanism
+    let retries = 0;
+    const initialBuild = () => {
+      if (typeof Chart === 'undefined' && retries < 5) {
+        retries++;
+        setTimeout(initialBuild, 500);
+        return;
+      }
+      rebuild();
+    };
+    initialBuild();
+
+    const mo = new MutationObserver((mutations) => {
+      // Only rebuild if the canvas was actually removed or replaced
+      if (mutations.some(m => Array.from(m.removedNodes).some(n => n.id === id))) {
+        rebuild();
+      }
+    });
+    mo.observe(holder, { childList: true });
+
+    document.addEventListener('visibilitychange', () => { 
+      if (!document.hidden) {
+        setTimeout(rebuild, 100);
+      }
+    });
+  }
+
+  $('#tvt-analytics-form').on('submit', function(e){
+    e.preventDefault();
+    fetchStats();
+  });
+
+  // Default last 30 days
+  const today = TVT_ANALYTICS.today;
+  const d = new Date(today);
+  const to = today;
+  const fromDate = new Date(d.getTime() - 29*24*60*60*1000);
+  const fmt = x => x.toISOString().slice(0,10);
+  $('#tvt_to').val(to);
+  $('#tvt_from').val(fmt(fromDate));
+
+  // Wait for document ready to ensure elements exist
+  $(document).ready(function() {
+    // Ensure canvas elements exist
+    const createCanvas = (id) => {
+      const container = $(`#${id}_container`);
+      if (container.length) {
+        container.empty().append(
+          $('<canvas>', {
+            id: id,
+            class: 'tvt-canvas skip-lazy no-lazyload',
+            'data-no-lazy': '1',
+            'data-nitro-lazy': 'off',
+            css: { minHeight: '160px', width: '100%' }
+          })
+        );
+        console.log(`Canvas ${id} initialized`);
+        return true;
+      }
+      console.error(`Container #${id}_container not found`);
+      return false;
+    };
+
+    // Initialize canvases
+    const canvasesReady = ['tvt_chart_daily', 'tvt_chart_pages'].every(createCanvas);
+    
+    if (canvasesReady) {
+      console.log('Canvases initialized, setting up protection');
+      protectCanvas('tvt_chart_daily', () => renderDaily(window.__tvt_last_daily || []));
+      protectCanvas('tvt_chart_pages', () => renderPages(window.__tvt_last_pages || []));
+      
+      // Fetch stats after canvas initialization
+      console.log('Fetching initial stats');
+      fetchStats();
+    } else {
+      console.error('Failed to initialize canvas elements');
+    }
+  });
+})(jQuery);
